@@ -1,0 +1,6 @@
+# .gitignore file
+venv
+.venv
+# other common exclusions
+__pycache__
+*.pyc

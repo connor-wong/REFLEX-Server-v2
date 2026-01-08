@@ -1,0 +1,7 @@
+# config.py
+MODEL_PATH = "./Model_7n.pt"
+CAMERA_ID = 0  # 21 | 11
+IMG_SIZE = 320
+WINDOW_WIDTH = 720   # 1200
+WINDOW_HEIGHT = 1280 # 1920
+DISPLAY_UPDATE_MS = 30  # ~33 FPS max
