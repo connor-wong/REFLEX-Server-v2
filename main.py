@@ -1,6 +1,6 @@
 # main.py
 from PySide6.QtWidgets import QApplication, QMainWindow
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Qt
 
 # Widgets
 from components.boot.boot_widget import BootWidget
@@ -16,6 +16,8 @@ from core.app_controller import AppController
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+
+        # self.setWindowFlags(self.windowFlags() | Qt.WindowType.FramelessWindowHint)
         self.setWindowTitle("REFLEX UI")
         self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
         self.setStyleSheet("background-color: #101010;")
@@ -32,8 +34,9 @@ class MainWindow(QMainWindow):
         # Give VisionWidget access to the controller
         vision.set_controller(self.controller)
 
-        # Connect palm gesture → switch to question mode
+        # Connect gesture → switch to question mode
         vision.palm_held.connect(lambda: self.controller.set_mode(2))
+        vision.thumbs_up_held.connect(lambda: self.controller.set_mode(1))
 
         # Start boot animation (3 seconds total boot time)
         self.start_boot_animation(duration_ms=3000)

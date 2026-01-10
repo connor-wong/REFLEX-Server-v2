@@ -12,12 +12,11 @@ from ultralytics import YOLO
 from .custom_label import custom_annotate_segmentation
 
 # Config
-from config import MODEL_PATH, CAMERA_ID, IMG_SIZE
-
+from config import MODEL_PATH, CAMERA_ID, IMG_SIZE, DEBUG_MODE
 
 class VisionWidget(QWidget):
     palm_held = Signal()  # Custom signal emitted when "Palms" held for 3s
-    thumb_held = Signal() # Custom signal emitted when "Thumbs up" held for 3s
+    thumbs_up_held = Signal() # Custom signal emitted when "Thumbs up" held for 3s
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -28,6 +27,11 @@ class VisionWidget(QWidget):
         self.palm_detected = False
         self.palm_start_time = None
         self.PALM_HOLD_DURATION = 3.0
+
+        # Thumbs Up tracking
+        self.thumbs_up_detected = False
+        self.thumbs_up_start_time = None
+        self.THUMBS_UP_HOLD_DURATION = 3.0
 
         self.start_vision_pipeline()
 
@@ -58,6 +62,7 @@ class VisionWidget(QWidget):
         # FPS overlay (child of video_label for proper overlay)
         self.fps_label = QLabel("FPS: --", self.video_label)
         self.fps_label.move(10, 10)
+        self.fps_label.adjustSize()
         self.fps_label.setStyleSheet("""
             color: lime;
             font-size: 28px;
@@ -66,12 +71,12 @@ class VisionWidget(QWidget):
             background-color: rgba(0, 0, 0, 140);
             border-radius: 12px;
         """)
-        self.fps_label.adjustSize()
-
+        self.fps_label.setVisible(DEBUG_MODE)
+        
     def start_vision_pipeline(self):
         self.model = YOLO(MODEL_PATH, task="segment")
 
-        self.cap = cv2.VideoCapture(CAMERA_ID, cv2.CAP_V4L2)
+        self.cap = cv2.VideoCapture(CAMERA_ID, cv2.CAP_DSHOW) #cv2.CAP_V4L2 for Rock 5B SBC
         if not self.cap.isOpened():
             self.cap = cv2.VideoCapture(CAMERA_ID)
 
@@ -99,14 +104,18 @@ class VisionWidget(QWidget):
     def capture_worker(self):
         while not self.stop_event.is_set():
             ret, frame = self.cap.read()
+
             if not ret:
                 continue
+
             frame = cv2.flip(frame, 1)
+
             if self.frame_q.full():
                 try:
                     self.frame_q.get_nowait()
                 except queue.Empty:
                     pass
+
             self.frame_q.put(frame)
 
     def inference_worker(self):
@@ -118,7 +127,7 @@ class VisionWidget(QWidget):
 
             results = self.model(frame, imgsz=IMG_SIZE, verbose=False)
 
-            # Vision mode
+            """ During Vision mode (1) """
             if self.current_mode() == 1:
                 # Check if "Palms" class is detected in this frame
                 palm_detected_now = any("Palms" in results[0].names.get(cls_id, "") for cls_id in results[0].boxes.cls.int().tolist())
@@ -171,6 +180,29 @@ class VisionWidget(QWidget):
 
                 self.result_q.put(annotated)
 
+            """ During Question mode (2) """
+            if self.current_mode() == 2:
+                # Check if "Thumbs up" class is detected in this frame
+                thumbs_up_detected_now = any("Thumbs up" in results[0].names.get(cls_id, "") for cls_id in results[0].boxes.cls.int().tolist())
+
+                # Update thumbs up hold state
+                if thumbs_up_detected_now:
+                    if not self.thumbs_up_detected:
+                        # First detection
+                        self.thumbs_up_detected = True
+                        self.thumbs_up_start_time = time.time()
+
+                    elif (time.time() - self.thumbs_up_start_time) >= self.THUMBS_UP_HOLD_DURATION: # Held for 3+ seconds → emit signal once
+                        if not hasattr(self, '_thumbs_up_signal_emitted'):
+                            self._thumbs_up_signal_emitted = True
+                            self.thumbs_up_held.emit()  # Trigger mode change
+                else:
+                    # Thumbs Up not visible → reset
+                    self.thumbs_up_detected = False
+                    self.thumbs_up_start_time = None
+                    if hasattr(self, '_thumbs_up_signal_emitted'):
+                        del self._thumbs_up_signal_emitted  # Allow future triggers
+
     def update_display(self):
         if self.result_q.empty():
             return
@@ -189,14 +221,15 @@ class VisionWidget(QWidget):
         self.video_label.setPixmap(scaled)
 
         # Update FPS
-        self.frame_count += 1
-        now = time.time()
-        if now - self.last_time >= 1.0:
-            fps = self.frame_count / (now - self.last_time)
-            self.fps_label.setText(f"FPS: {fps:.1f}")
-            self.fps_label.adjustSize()
-            self.frame_count = 0
-            self.last_time = now
+        if DEBUG_MODE:
+            self.frame_count += 1
+            now = time.time()
+            if now - self.last_time >= 1.0:
+                fps = self.frame_count / (now - self.last_time)
+                self.fps_label.setText(f"FPS: {fps:.1f}")
+                self.fps_label.adjustSize()
+                self.frame_count = 0
+                self.last_time = now
 
     # =====================
     # Events
