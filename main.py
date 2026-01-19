@@ -20,7 +20,7 @@ class MainWindow(QMainWindow):
         # self.setWindowFlags(self.windowFlags() | Qt.WindowType.FramelessWindowHint)
         self.setWindowTitle("REFLEX UI")
         self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
-        self.setStyleSheet("background-color: #101010;")
+        self.setStyleSheet("background-color: #000000;")
 
         # Create widgets
         boot = BootWidget()
@@ -55,7 +55,8 @@ class MainWindow(QMainWindow):
             if progress < 100:
                 QTimer.singleShot(interval_ms, update)
             else:
-                self.controller.set_mode(1) # Boot complete → switch to vision mode
+                pass
+                # self.controller.set_mode(1) # Boot complete → switch to vision mode
 
         # Start the animation
         QTimer.singleShot(interval_ms, update)
